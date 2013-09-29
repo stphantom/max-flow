@@ -24,7 +24,6 @@ pthread_mutex_t gr_mutex;
 pthread_mutex_t* thread_mutex;
 pthread_mutex_t* node_mutex;
 pthread_barrier_t start_barrier;
-pthread_cond_t* thread_go;
 
 struct node_entry {
   int height;
@@ -465,14 +464,8 @@ inline int send_work(int tid) {
 
   // accept new request
   me->request = MAX_THRD;
-
   // signal the requester
   requester->shareAmount = k;
-
-  //// let request_tid move on
-  //pthread_mutex_lock(&(thread_mutex[request_tid]));
-  //pthread_cond_signal(&(thread_go[request_tid]));
-  //pthread_mutex_unlock(&(thread_mutex[request_tid]));
 
   return 0;
 }
@@ -755,12 +748,8 @@ int main(long argc, char** argv) {
       (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t) * num_threads);
   if (thread_mutex == NULL)
     exit(-1);
-  thread_go = (pthread_cond_t*)malloc(sizeof(pthread_cond_t) * num_threads);
-  if (thread_go == NULL)
-    exit(-1);
   for (i = 0; i < num_threads; i++) {
     pthread_mutex_init(&(thread_mutex[i]), NULL);
-    pthread_cond_init(&(thread_go[i]), NULL);
   }
   for (i = 0; i < g_num_nodes; i++) {
     pthread_mutex_init(&(node_mutex[i]), NULL);
