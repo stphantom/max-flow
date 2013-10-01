@@ -7,29 +7,30 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <limits.h>
 
 #include "amf.h"
 #include "atomic.h"
 
-int num_threads;
-int g_num_nodes;
-int g_num_edges;
+static int num_threads;
+static int g_num_nodes;
+static int g_num_edges;
 long totalPushes;
 long totalLifts;
-int gr_threshold;
+static int gr_threshold;
 int GRcnt = 0;
 int HPcnt = 0;
 
-pthread_mutex_t gr_mutex;
-pthread_mutex_t* thread_mutex;
+static pthread_mutex_t gr_mutex;
+static pthread_mutex_t* thread_mutex;
 pthread_mutex_t* node_mutex;
 pthread_barrier_t start_barrier;
 
 struct node_entry {
-  int height;
+  unsigned int height;
   volatile int inQ;
   volatile long excess;
-  int wave;
+  unsigned int wave;
   struct edge_entry* adj_list;
 };
 
@@ -53,10 +54,11 @@ typedef struct {
   Node** Q;
 } ThreadEnv;
 
-Node* g_node;
-Node* source, *sink;
-Node* NoNode;
-ThreadEnv* threadEnv;
+static Node* g_node;
+static Node* source;
+static Node* sink;
+static Node* const NoNode;
+static ThreadEnv* threadEnv;
 Edge edge_sym, edge_seq;
 int edgecnt;
 Edge search_adj(Node* nodeid, Edge adjL);
@@ -183,42 +185,27 @@ int SortEdges() {
   return 0;
 }
 //==============queue=========
-inline int reenQ(ThreadEnv* t, Node* nodeadd) {
+inline void reenQ(ThreadEnv* t, Node* nodeadd) {
   t->Q[t->tail] = nodeadd;
   t->Q[t->head] = NoNode;
-  if (t->tail < LOCAL_Q_SIZE - 1)
-    t->tail++;
-  else
-    t->tail = 0;
-
-  if (t->head < LOCAL_Q_SIZE - 1)
-    t->head++;
-  else
-    t->head = 0;
-
-  return 0;
+  t->tail++;
+  t->tail = t->tail % LOCAL_Q_SIZE;
+  t->head++;
+  t->head = t->head % LOCAL_Q_SIZE;
 }
 
-inline int enQ(ThreadEnv* t, Node* nodeadd) {
+inline void enQ(ThreadEnv* t, Node* nodeadd) {
   t->Q[t->tail] = nodeadd;
-  if (t->tail < LOCAL_Q_SIZE - 1)
-    t->tail++;
-  else
-    t->tail = 0;
+  t->tail++;
+  t->tail = t->tail % LOCAL_Q_SIZE;
   t->Qsize++;
-  return 0;
 }
 
-inline int deQ(ThreadEnv* t, Node* nodeadd) {
-
+inline void deQ(ThreadEnv* t) {
   t->Qsize--;
   t->Q[t->head] = NoNode;
-  if (t->head < LOCAL_Q_SIZE - 1)
-    t->head++;
-  else
-    t->head = 0;
-
-  return 0;
+  t->head++;
+  t->head = t->head % LOCAL_Q_SIZE;
 }
 //==============queue=========
 
@@ -229,7 +216,7 @@ int init_threads(int n) {
     exit(-1);
   for (i = 0; i < n; i++) {
     threadEnv[i].Qsize = threadEnv[i].head = threadEnv[i].tail = 0;  //??
-    threadEnv[i].Q = (Node**)calloc(Q_SIZE, sizeof(Node*));
+    threadEnv[i].Q = (Node**)calloc(LOCAL_Q_SIZE, sizeof(Node*));
     if (threadEnv[i].Q == NULL)
       exit(-1);
     threadEnv[i].request = MAX_THRD;
@@ -526,7 +513,7 @@ void* scan_nodes(void* threadid) {
   int i, j, k;
   long tid;
 
-  int min_nbr_height;
+  unsigned int min_nbr_height;
   Edge nbr_edge, min_height_edge;
   long d;
   long local_e;
@@ -542,8 +529,10 @@ void* scan_nodes(void* threadid) {
   ThreadEnv* thisThread;
   thisThread = threadEnv + tid;
 
+#if 0
   if (tid == 0)
     global_relabel(tid);
+#endif
 
   pthread_barrier_wait(&start_barrier);
 
@@ -571,7 +560,7 @@ void* scan_nodes(void* threadid) {
                   cur_node->excess);
           fflush(stderr);
 #endif
-        min_nbr_height = 3 * g_num_nodes;
+        min_nbr_height = UINT_MAX;
         for (nbr_edge = cur_node->adj_list; nbr_edge < (cur_node + 1)->adj_list;
              nbr_edge++) {
 
@@ -645,10 +634,10 @@ void* scan_nodes(void* threadid) {
         if (isInQ == 0) {
           reenQ(thisThread, cur_node);
         } else {
-          deQ(thisThread, cur_node);
+          deQ(thisThread);
         }
       } else {
-        deQ(thisThread, cur_node);
+        deQ(thisThread);
       }
 
 #ifdef HELP
@@ -713,7 +702,6 @@ int main(long argc, char** argv) {
   fprintf(stderr, "%d nodes, %d edges\n\n", g_num_nodes, g_num_edges);
 
   // initialize graph
-
   init_graph();
 
   // read and sort edges
@@ -726,7 +714,6 @@ int main(long argc, char** argv) {
     if (getc(fp) == 'a') {
       fscanf(fp, "%d	%d	%d/n", &from, &to, &capacity);
       edge = Addedge(from - 1, to - 1, capacity, 0, edge);
-
       i++;
     }
   }

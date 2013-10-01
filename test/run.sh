@@ -1,12 +1,14 @@
 #!/bin/bash
 # usage: $./run.sh <num_of_threads> 
 
-bin=../amf_d
+bin=$(dirname $0)/../amf_d
+graph=$(dirname $0)/bo-KZ2.max
 nt=${1:-16}
+nr=${2:-10000}
 
 wrong_run=0
-for i in $(seq 1 10000); do
-  result=$($bin bo-KZ2.max $nt 2 2>&1)
+for i in $(seq 1 $nr); do
+  result=$($bin $graph $nt 2 2>&1)
   flow=$(echo "$result" | grep FLOW | awk '{print $2}')
   time=$(echo "$result" | grep Wall | awk '{print $3}')
   echo [$wrong_run/$i] $flow $time

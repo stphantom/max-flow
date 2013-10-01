@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -pthread -O3 -g
+CFLAGS = -pthread -O3
 
 all: amf_d
 
